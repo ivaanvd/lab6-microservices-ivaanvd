@@ -127,4 +127,4 @@ Google Gemini (LLM) fue utilizado como asistente técnico durante este laborator
 ### Trabajo Original vs Generado por IA
 **Trabajo Original**: Ejecución de todos los comandos, configuración del entorno, toma de capturas de pantalla, modificación de archivos de configuración, verificación de resultados y redactar primera versión de este reporte.
 
-**Soporte de IA**: Se utilizó para entender los conceptos teóricos de Eureka (específicamente el mecanismo de desalojo y el modo de auto-preservación para entornos Windows), para solucionar el comportamiento del error de conexión durante la prueba de fallos, y para estructurar y formatear este informe en Markdown.
+**Soporte de IA**: Se utilizó para entender los conceptos teóricos de Eureka (específicamente el mecanismo de desalojo y el modo de auto-preservación para entornos Windows), para entender el comportamiento del error de conexión durante la prueba de fallos, y para estructurar y formatear este informe en Markdown.

@@ -1,109 +1,130 @@
-# Lab 6 Microservices - Project Report
+# Laboratorio 6: Microservicios - Informe
 
-## 1. Configuration Setup
+## 1. Configuración del Sistema (Configuration Setup)
 
-**Configuration Repository**: [Link to your forked repository]
+### Descripción de los archivos de configuración
+Los archivos de configuración se encuentran en el directorio `config/config/`. Este directorio actúa como un repositorio centralizado para las propiedades de todos los microservicios del sistema. En lugar de tener las propiedades "hardcodeadas" (incrustadas) en cada aplicación, el **Config Server** sirve estos archivos a los servicios durante el inicio a través de HTTP.
 
-Describe the changes you made to the configuration:
+* **accounts-service.yml**: Contiene la configuración específica para el backend de Cuentas. Define el nombre de la aplicación, el puerto del servidor y los niveles de registro (logging).
+* **web-service.yml**: Contiene la configuración para el frontend Web (MVC), incluyendo la URL/ID del Servicio al que debe llamar para obtener datos.
 
-- What did you modify in `accounts-service.yml`?
-- Why is externalized configuration useful in microservices?
+### Descripción de los cambios realizados
+Modificamos el archivo `accounts-service.yml` para demostrar las actualizaciones dinámicas de configuración sin cambiar el código fuente.
 
----
+* **Puerto Original**: 3333
+* **Nuevo Puerto**: 2222
 
-## 2. Service Registration (Task 1)
+**Evidencia del cambio (`config/config/accounts-service.yml`):**
+```yaml
+spring:
+  application:
+    name: accounts-service  # Identifica esta aplicación
 
-### Accounts Service Registration
+# Servidor HTTP
+server:
+  port: 2222   # Modificado de 3333
 
-![Accounts Registration Log](docs/screenshots/accounts-registration.png)
+management:
+  info:
+    env:
+      enabled: true
+  endpoint:
+    info:
+      enabled: true
+    health:
+      enabled: true
+  endpoints:
+    web:
+      exposure:
+        include: "*"
+```
 
-Explain what happens during service registration.
+Al reiniciar el Config Server y lanzar una nueva instancia del servicio Accounts, este tomó automáticamente el nuevo puerto (2222) mientras la instancia original permanecía en el 3333.
 
-### Web Service Registration
+## 2. Registro de Servicios (Task 1)
 
-![Web Registration Log](docs/screenshots/web-registration.png)
+### Proceso de Registro
+Cuando un servicio (como accounts-service o web-service) arranca, actúa como un Cliente Eureka.
 
-Explain how the web service discovers the accounts service.
+1. Lee la propiedad `eureka.client.serviceUrl.defaultZone` para encontrar el Servidor de Descubrimiento.
+2. Envía una petición REST POST para registrar sus metadatos (IP, Puerto, Nombre del Servicio).
+3. Mantiene un "latido" (heartbeat) para decirle al servidor que sigue vivo.
 
----
+### Evidencia en Logs
+A continuación se muestran los logs que confirman que ambos servicios se registraron exitosamente en el Servidor de Descubrimiento (el estado 204 indica éxito):
 
-## 3. Eureka Dashboard (Task 2)
+**Log del Servicio Accounts:**
 
-![Eureka Dashboard](docs/screenshots/eureka-dashboard.png)
+![Log del Servicio Accounts](docs/task1.1.png)
 
-Describe what the Eureka dashboard shows:
+**Log del Servicio Web:**
 
-- Which services are registered?
-- What information does Eureka track for each instance?
+![Log del Servicio Web](docs/task1.2.png)
 
----
+## 3. Dashboard de Eureka (Task 2)
 
-## 4. Multiple Instances (Task 4)
+### Análisis del Dashboard
+La captura de pantalla a continuación muestra el Dashboard de Netflix Eureka ejecutándose en el puerto 8761.
 
-![Multiple Instances](docs/screenshots/multiple-instances.png)
+![Dashboard de Eureka](docs/task2_eureka_dashboard.png)
 
-Answer the following questions:
+**Instances currently registered**: Podemos ver ACCOUNTS-SERVICE y WEB-SERVICE listados.
 
-- What happens when you start a second instance of the accounts service?
-- How does Eureka handle multiple instances?
-- How does client-side load balancing work with multiple instances?
+**Disponibilidad**: Esto confirma que el mecanismo de descubrimiento funciona y los servicios son visibles entre sí sin necesidad de IPs fijas.
 
----
+## 4. Múltiples Instancias (Task 4)
 
-## 5. Service Failure Analysis (Task 5)
+### Manejo de Múltiples Instancias
+Eureka actúa como un registro de servicios dinámico. Cuando lanzamos una segunda instancia de ACCOUNTS-SERVICE (una en el puerto 3333, otra en el 2222), ambas se registraron bajo el mismo nombre de aplicación ACCOUNTS-SERVICE. Eureka mantiene una lista de todas las instancias disponibles para ese ID de servicio.
 
-### Initial Failure
+### Balanceo de Carga del Lado del Cliente
+El Servicio Web (Cliente) utiliza Client-Side Load Balancing (a través de Spring Cloud LoadBalancer).
 
-![Error Screenshot](docs/screenshots/failure-error.png)
+1. El cliente pregunta a Eureka por las direcciones disponibles de ACCOUNTS-SERVICE.
+2. Eureka devuelve la lista: `[localhost:3333, localhost:2222]`.
+3. El cliente decide localmente a qué instancia llamar (usando un algoritmo Round-Robin), distribuyendo el tráfico equitativamente entre las dos instancias del backend.
 
-Describe what happens immediately after stopping the accounts service on port 3333.
+![Múltiples Instancias](docs/task4.png)
 
-### Eureka Instance Removal
+## 5. Análisis de Fallos (Task 5)
 
-![Instance Removal](docs/screenshots/instance-removal.png)
+### Comportamiento ante Errores
+Inmediatamente después de detener la instancia de ACCOUNTS-SERVICE (puerto 3333) mediante Ctrl+C, el Servicio Web intentó conectarse a ella porque su caché local aún contenía la dirección del servicio ahora muerto. Esto resultó en un fallo de conexión, mostrado como una página de error genérica y una petición de red fallida (Estado 500 o Connection Refused).
 
-Explain how Eureka detects and removes the failed instance:
+**Captura del Error:**
 
-- How long did it take for Eureka to remove the dead instance?
-- What mechanism does Eureka use to detect failures?
+![Error de Conexión](docs/task5.png)
 
----
+### Mecanismo de Detección de Fallos
+Eureka utiliza un mecanismo de Latidos (Heartbeat) para detectar fallos.
 
-## 6. Service Recovery Analysis (Task 6)
+1. Los servicios registrados envían un pulso a Eureka periódicamente.
+2. Si Eureka no recibe un latido durante un periodo específico (configurado vía `eviction-interval`), asume que la instancia está muerta.
+3. Entonces elimina la instancia del registro.
 
-![Recovery State](docs/screenshots/recovery.png)
 
-Answer the following questions:
+## 6. Análisis de Recuperación (Task 6)
 
-- Why does the web service eventually recover?
-- How long did recovery take?
-- What role does client-side caching play in the recovery process?
+### Por qué funciona la recuperación
+La recuperación ocurre automáticamente debido al patrón de Descubrimiento Dinámico:
 
----
+1. Una vez que Eureka desalojó la instancia muerta (puerto 3333), el registro solo contenía la instancia sana (puerto 2222).
+2. El cliente del Servicio Web actualizó su caché local desde Eureka.
+3. Las peticiones subsiguientes fueron enrutadas únicamente a la instancia sana (puerto 2222), restaurando la funcionalidad completa sin reiniciar el frontend.
 
-## 7. Conclusions
+### Tiempo de Recuperación
+La recuperación tomó aproximadamente 5 segundos. Esta recuperación rápida fue posible porque configuramos `eureka.server.eviction-interval-timer-in-ms: 1000` y deshabilitamos self-preservation (configuración específica para Windows), permitiendo a Eureka detectar y eliminar el nodo muerto casi inmediatamente.
 
-Summarize what you learned about:
+**Estado Recuperado:**
 
-- Microservices architecture
-- Service discovery with Eureka
-- System resilience and self-healing
-- Challenges you encountered and how you solved them
+![Estado Recuperado](docs/task6.png)
 
----
+## 7. Declaración de IA (AI Disclosure)
 
-## 8. AI Disclosure
+### Herramientas de IA utilizadas
+Google Gemini (LLM) fue utilizado como asistente técnico durante este laboratorio.
 
-**Did you use AI tools?** (ChatGPT, Copilot, Claude, etc.)
+### Trabajo Original vs Generado por IA
+**Trabajo Original**: Ejecución de todos los comandos, configuración del entorno, toma de capturas de pantalla, modificación de archivos de configuración, verificación de resultados y redactar primera versión de este reporte.
 
-- If YES: Which tools? What did they help with? What did you do yourself?
-- If NO: Write "No AI tools were used."
-
-**Important**: Explain your own understanding of microservices patterns and Eureka behavior, even if AI helped you write parts of this report.
-
----
-
-## Additional Notes
-
-Any other observations or comments about the assignment.
-
+**Soporte de IA**: Se utilizó para entender los conceptos teóricos de Eureka (específicamente el mecanismo de desalojo y el modo de auto-preservación para entornos Windows), para solucionar el comportamiento del error de conexión durante la prueba de fallos, y para estructurar y formatear este informe en Markdown.
